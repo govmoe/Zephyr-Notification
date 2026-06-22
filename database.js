@@ -20,7 +20,9 @@ function uuid() {
 }
 
 function now() {
-  return new Date().toISOString().replace('T', ' ').slice(0, 19);
+  const d = new Date();
+  d.setHours(d.getHours() + 8);
+  return d.toISOString().replace('T', ' ').slice(0, 19);
 }
 
 module.exports = {

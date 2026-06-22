@@ -62,7 +62,7 @@ function store(env) {
   };
 }
 
-function now() { return new Date().toISOString().replace('T', ' ').slice(0, 19); }
+function now() { const d = new Date(); d.setHours(d.getHours() + 8); return d.toISOString().replace('T', ' ').slice(0, 19); }
 
 // ---- API routes ----
 app.get('/api/notifications', async c => c.json({ success: true, data: await store(c.env).getAll() }));
