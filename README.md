@@ -27,7 +27,7 @@ notification-system/
 ├── worker-base.js     # Cloudflare Worker 模板
 ├── worker.js          # Worker 入口（构建生成）
 ├── build-worker.js    # 内联打包脚本
-├── wrangler.toml      # Worker 配置
+├── wrangler.example.toml # Worker 配置模板（复制为 wrangler.toml 填入实际值）
 ├── package.json
 ├── .env.example       # 环境变量模板
 └── public/
@@ -78,7 +78,7 @@ npx wrangler kv namespace create NOTIFICATIONS
 npx wrangler kv namespace create NOTIFICATIONS --preview
 ```
 
-将输出的 `id` 和 `preview_id` 填入 `wrangler.toml`。
+将输出的 `id` 和 `preview_id` 填入 `wrangler.example.toml`，并重命名为 `wrangler.toml`。
 
 ### 3. 配置 wrangler.toml
 
