@@ -112,7 +112,7 @@
 
   toggle.onclick = function () {
     isOpen = !isOpen;
-    if (isOpen) { panel.classList.add('ns-open'); fullRender(false); }
+    if (isOpen) { panel.classList.add('ns-open'); readPage = 0; unreadPage = 0; fullRender(false); }
     else { panel.classList.remove('ns-open'); }
     ensureAudioCtx();
   };
@@ -142,9 +142,6 @@
       badge.style.display = 'none';
     }
     if (tab === 'read' && !readAll.length) tab = 'unread';
-    // Reset page if it exceeds available items
-    if (readPage * PAGE >= readAll.length) readPage = Math.max(0, Math.floor((readAll.length - 1) / PAGE));
-    if (unreadPage * PAGE >= unread.length) unreadPage = Math.max(0, Math.floor((unread.length - 1) / PAGE));
 
     var h = '';
     h += '<div class="ns-tabs" id="ns-tabs">' +
@@ -156,8 +153,9 @@
     if (!readAll.length) {
       h += '<div class="ns-empty">暂无已读通知</div>';
     } else {
-      var end = Math.min((readPage + 1) * PAGE, readAll.length);
-      for (var i = 0; i < end; i++) h += card(readAll[i], i, true, refresh);
+      var rStart = readPage * PAGE;
+      var rEnd = Math.min((readPage + 1) * PAGE, readAll.length);
+      for (var i = rStart; i < rEnd; i++) h += card(readAll[i], i - rStart, true, refresh);
       if (readAll.length > PAGE) h += buildPagination(readAll.length, readPage, 'read');
     }
     h += '</div>';
@@ -166,8 +164,9 @@
     if (!unread.length) {
       h += '<div class="ns-empty">没有未读通知</div>';
     } else {
+      var uStart = unreadPage * PAGE;
       var uEnd = Math.min((unreadPage + 1) * PAGE, unread.length);
-      for (var ui = 0; ui < uEnd; ui++) h += card(unread[ui], ui, false, refresh);
+      for (var ui = uStart; ui < uEnd; ui++) h += card(unread[ui], ui - uStart, false, refresh);
       if (unread.length > PAGE) h += buildPagination(unread.length, unreadPage, 'unread');
     }
     h += '</div>';
@@ -397,6 +396,9 @@
           var unread = res.data.filter(function (n) { return !dismissed[n.id]; });
           badge.textContent = unread.length > 99 ? '99+' : unread.length;
           badge.style.display = unread.length ? 'flex' : 'none';
+
+          // 实时刷新当前列表
+          if (isOpen) refreshListView(tab);
         }
       })
       .catch(function () {});
