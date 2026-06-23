@@ -4,3 +4,4 @@ worker.js
 .wrangler/
 .env
 *.log
+wrangler.toml

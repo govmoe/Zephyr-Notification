@@ -5,11 +5,11 @@ compatibility_flags = ["nodejs_compat"]
 
 [[kv_namespaces]]
 binding = "NOTIFICATIONS"
-id = "625309fe0abc47baa1da1084a7bd822f"
-preview_id = "10f4c8bf90a140c9ba627cdd759c58a3"
+id = "你的KV_ID"
+preview_id = "你的Preview_ID"
 
 [observability]
 enabled = true
 
 [vars]
-GITHUB_CLIENT_ID = "Ov23liayFBY4kRqe8tC2"
+GITHUB_CLIENT_ID = "你的GitHub OAuth Client ID"
