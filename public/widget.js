@@ -407,10 +407,7 @@
           badge.style.display = unread.length ? 'flex' : 'none';
 
           // 实时刷新：有新通知时自动切到未读标签
-          if (isOpen) {
-            if (unread.length && tab !== 'unread') { tab = 'unread'; readPage = 0; unreadPage = 0; fullRender(true); }
-            else refreshListView(tab);
-          }
+          if (isOpen) refreshListView(tab);
         }
       })
       .catch(function () {});
