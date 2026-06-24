@@ -64,6 +64,12 @@
     '.ns-content em{color:rgba(0,0,0,.6)}' +
     '.ns-content a{color:#1976d2;text-decoration:none}' +
     '.ns-content a:hover{text-decoration:underline}' +
+    '.ns-content h2,.ns-content h3,.ns-content h4{color:rgba(0,0,0,.87);margin:8px 0 4px;font-weight:600}' +
+    '.ns-content h2{font-size:15px}.ns-content h3{font-size:14px}.ns-content h4{font-size:13px}' +
+    '.ns-content pre{background:rgba(0,0,0,.04);padding:8px 12px;border-radius:6px;overflow-x:auto;font-size:12px;margin:6px 0}' +
+    '.ns-content pre code{background:none;padding:0;color:rgba(0,0,0,.7)}' +
+    '.ns-content ul{padding-left:20px;margin:4px 0}' +
+    '.ns-content li{color:rgba(0,0,0,.6);font-size:13px;margin:2px 0}' +
     '.ns-badge{display:inline-flex;align-items:center;font-size:10px;height:18px;padding:0 8px;border-radius:9px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}' +
     '.ns-badge-emergency{background:linear-gradient(135deg,#ff5252,#d32f2f);color:#fff}' +
     '.ns-close{flex-shrink:0;width:26px;height:26px;border-radius:50%;border:none;background:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:rgba(0,0,0,.3);padding:0;margin-top:-2px;transition:all .2s}' +
@@ -308,7 +314,7 @@
       '<span class="ns-icon">' + (n.is_emergency ? ICONS.emergency : (ICONS[n.type] || ICONS.info)) + '</span>' +
       '<div class="ns-body">' +
         '<div class="ns-title">' + esc(n.title) + (n.is_emergency ? '<span class="ns-badge ns-badge-emergency">紧急</span>' : '') + '</div>' +
-        (n.content ? '<div class="ns-content">' + n.content + '</div>' : '') +
+        (n.content ? '<div class="ns-content">' + md(n.content) + '</div>' : '') +
         '<div class="ns-time">' + n.created_at + '</div>' +
       '</div>' +
       (read ? '<span style="flex-shrink:0;color:#388e3c;margin-top:-2px">' + ICONS.check + '</span>' : '<button class="ns-close" data-id="' + n.id + '">' + ICONS.close + '</button>') +
@@ -345,6 +351,31 @@
     var div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
+  }
+
+  // Markdown + HTML 渲染
+  function md(str) {
+    if (!str) return '';
+    // 代码块（先处理，避免内部 Markdown 被解析）
+    str = str.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+    // 行内代码
+    str = str.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // 标题
+    str = str.replace(/^### (.+)$/gm, '<h4>$1</h4>');
+    str = str.replace(/^## (.+)$/gm, '<h3>$1</h3>');
+    str = str.replace(/^# (.+)$/gm, '<h2>$1</h2>');
+    // 粗体 / 斜体
+    str = str.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+    str = str.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    str = str.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    // 链接
+    str = str.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    // 无序列表
+    str = str.replace(/^[\-\*] (.+)$/gm, '<li>$1</li>');
+    str = str.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+    // 换行
+    str = str.replace(/\n\n/g, '<br><br>');
+    return str;
   }
 
   // Play a "ding" notification sound

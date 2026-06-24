@@ -102,7 +102,7 @@ function renderItem(n) {
           <span class="badge type-badge">${typeLabels[n.type] || n.type}</span>
           ${!n.is_active ? '<span class="badge" style="background:#eee;color:#999;">已停用</span>' : ''}
         </div>
-        ${n.content ? `<div class="info-content">${n.content}</div>` : ''}
+        ${n.content ? `<div class="info-content">${mdToHtml(n.content)}</div>` : ''}
         <div class="info-meta">ID: ${n.id.slice(0, 8)}... | ${n.created_at}</div>
       </div>
       <div class="item-actions">
@@ -117,6 +117,23 @@ function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
+}
+
+function mdToHtml(str) {
+  if (!str) return '';
+  str = escapeHtml(str);
+  str = str.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+  str = str.replace(/`([^`]+)`/g, '<code>$1</code>');
+  str = str.replace(/^### (.+)$/gm, '<h4>$1</h4>');
+  str = str.replace(/^## (.+)$/gm, '<h3>$1</h3>');
+  str = str.replace(/^# (.+)$/gm, '<h2>$1</h2>');
+  str = str.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+  str = str.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  str = str.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  str = str.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+  str = str.replace(/^[\-\*] (.+)$/gm, '<li>$1</li>');
+  str = str.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+  return str;
 }
 
 // ========== 添加通知 ==========

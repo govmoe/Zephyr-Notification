@@ -77,6 +77,12 @@ header h1 { font-size: 24px; color: #1a1a1a; }
 .notification-item .info-content strong { color: #333; }
 .notification-item .info-content a { color: #1677ff; text-decoration: none; }
 .notification-item .info-content a:hover { text-decoration: underline; }
+.notification-item .info-content h2,.notification-item .info-content h3,.notification-item .info-content h4 { color: #333; margin: 8px 0 4px; font-weight: 600; }
+.notification-item .info-content h2 { font-size: 15px; } .notification-item .info-content h3 { font-size: 14px; } .notification-item .info-content h4 { font-size: 13px; }
+.notification-item .info-content pre { background: #f5f5f5; padding: 8px 12px; border-radius: 6px; overflow-x: auto; font-size: 12px; margin: 6px 0; }
+.notification-item .info-content pre code { background: none; padding: 0; color: #555; }
+.notification-item .info-content ul { padding-left: 20px; margin: 4px 0; }
+.notification-item .info-content li { color: #666; font-size: 13px; margin: 2px 0; }
 .notification-item .badge { font-size: 11px; padding: 1px 8px; border-radius: 10px; font-weight: 500; }
 .notification-item .badge.emergency-badge { background: #ff4d4f; color: #fff; }
 .notification-item .badge.type-badge { background: #e6f4ff; color: #1677ff; }
