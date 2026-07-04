@@ -1,99 +1,116 @@
+/**
+ * Netlify Function 入口
+ * 将 Express 应用包装为 Netlify Function
+ * 
+ * 使用方式：
+ * 1. 部署到 Netlify 时自动使用此文件
+ * 2. 需要在 Netlify 后台设置环境变量：
+ *    - GITHUB_CLIENT_ID
+ *    - GITHUB_CLIENT_SECRET
+ *    - JWT_SECRET
+ *    - GITHUB_CALLBACK_URL (可选)
+ */
+
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
-const https = require('https');
-const db = require('./database');
+const crypto = require('crypto');
+const serverless = require('serverless-http');
+const db = require('../../database');
+const oauth2 = require('../../oauth2');
+const GitHubProvider = require('../../oauth2/providers/github');
 
 const app = express();
 const PORT = process.env.PORT || 3456;
 
-// ========== GitHub OAuth 配置 ==========
-// 在 https://github.com/settings/developers 创建 OAuth App 并填入
-const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID || '';
-const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET || '';
-const crypto = require('crypto');
-
+// ========== JWT 密钥管理 ==========
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
 if (!process.env.JWT_SECRET) {
-  console.warn('[安全警告] 未设置 JWT_SECRET 环境变量，已使用随机密钥。重启后所有会话将失效。');
-  console.warn('[安全警告] 请在 .env 中设置 JWT_SECRET=你的密钥');
+  console.warn('[安全警告] 未设置 JWT_SECRET 环境变量，已使用运行时随机密钥。');
+  console.warn('[安全警告] 请在 Netlify 后台设置 JWT_SECRET 环境变量。');
 }
-const GITHUB_CALLBACK_URL = process.env.GITHUB_CALLBACK_URL || `http://localhost:${PORT}/auth/github/callback`;
+const RUNTIME_JWT_SECRET = JWT_SECRET;
+
+// ========== OAuth2 Provider 注册 ==========
+const GITHUB_CALLBACK_URL = process.env.GITHUB_CALLBACK_URL || '';
+
+oauth2.register('github', new GitHubProvider({
+  clientId: process.env.GITHUB_CLIENT_ID,
+  clientSecret: process.env.GITHUB_CLIENT_SECRET,
+  callbackUrl: GITHUB_CALLBACK_URL
+}));
+
+// ========== 安全中间件 ==========
+app.use((req, res, next) => {
+  res.setHeader('X-Powered-By', '');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+
+  const pathname = req.path;
+  if (pathname === '/admin.html' || pathname === '/admin.js' || pathname.startsWith('/api/')) {
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self' data:; connect-src 'self' https:; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
+    );
+  }
+  next();
+});
 
 app.use(cors());
 app.use(express.json({ limit: '10kb' }));
 app.use(cookieParser());
-app.use(express.static(path.join(__dirname, 'public')));
-app.disable('x-powered-by');
 
-// 简易限流（单进程用，生产建议用 express-rate-limit）
-const rateLimit = new Map();
-setInterval(() => { rateLimit.clear(); }, 60000);
-app.use((req, res, next) => {
-  const ip = req.ip;
-  const now = Date.now();
-  const count = (rateLimit.get(ip) || 0) + 1;
-  if (count > 100) return res.status(429).json({ success: false, message: '请求过于频繁' });
-  rateLimit.set(ip, count);
-  next();
+// ========== 通用 OAuth2 路由 ==========
+
+app.get('/api/auth/providers', (req, res) => {
+  const host = req.get('host');
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+  const baseUrl = `${protocol}://${host}`;
+  const providers = oauth2.getConfiguredProviders(baseUrl);
+  res.json({ success: true, data: providers });
 });
 
-// ========== GitHub OAuth 路由 ==========
-
-function githubRequest(urlPath, options = {}) {
-  const url = new URL(urlPath);
-  return new Promise((resolve, reject) => {
-    const req = https.request(url, {
-      method: options.method || 'GET',
-      headers: { 'User-Agent': 'Notification-System', ...options.headers }
-    }, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try { resolve(JSON.parse(data)); } catch (e) { resolve(data); }
-      });
-    });
-    req.on('error', reject);
-    if (options.body) req.write(options.body);
-    req.end();
-  });
-}
-
-app.get('/auth/github', (req, res) => {
-  if (!GITHUB_CLIENT_ID) return res.status(500).json({ error: 'GitHub OAuth 未配置' });
-  const redirectUrl = `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&scope=read:user&redirect_uri=${encodeURIComponent(GITHUB_CALLBACK_URL)}`;
-  res.redirect(redirectUrl);
+app.get('/auth/:provider', (req, res) => {
+  const { provider } = req.params;
+  try {
+    const authUrl = oauth2.getAuthUrl(provider);
+    res.redirect(authUrl);
+  } catch (e) {
+    if (e.message.includes('not configured')) {
+      return res.status(500).json({ error: `${provider} OAuth 未配置` });
+    }
+    res.status(400).json({ error: `未知的 OAuth provider: ${provider}` });
+  }
 });
 
-app.get('/auth/github/callback', async (req, res) => {
+app.get('/auth/:provider/callback', async (req, res) => {
+  const { provider } = req.params;
   const { code } = req.query;
   if (!code) return res.redirect('/admin.html?error=no_code');
+
   try {
-    const tokenRes = await githubRequest('https://github.com/login/oauth/access_token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ client_id: GITHUB_CLIENT_ID, client_secret: GITHUB_CLIENT_SECRET, code, redirect_uri: GITHUB_CALLBACK_URL })
-    });
-    if (!tokenRes.access_token) return res.redirect('/admin.html?error=token_failed');
-    const user = await githubRequest('https://api.github.com/user', {
-      headers: { 'Authorization': `Bearer ${tokenRes.access_token}`, 'Accept': 'application/json' }
-    });
-    if (!user || !user.id) return res.redirect('/admin.html?error=auth_failed');
-    const token = jwt.sign({ id: user.id, login: user.login, name: user.name, avatar: user.avatar_url }, JWT_SECRET, { expiresIn: '7d' });
+    const user = await oauth2.handleCallback(provider, code);
+    const token = jwt.sign(
+      { id: user.id, login: user.login, name: user.name, avatar: user.avatar, provider: user.provider },
+      RUNTIME_JWT_SECRET,
+      { expiresIn: '7d', algorithm: 'HS256' }
+    );
     res.cookie('ns_token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: true,
       sameSite: 'lax',
       maxAge: 7 * 24 * 3600 * 1000,
       path: '/'
     });
     res.redirect('/admin.html');
   } catch (e) {
-    console.error('Auth error:', e);
-    res.redirect('/admin.html?error=auth_failed');
+    console.error(`[${provider}] Auth error:`, e.message);
+    res.redirect(`/admin.html?error=auth_failed&provider=${provider}`);
   }
 });
 
@@ -101,7 +118,7 @@ app.get('/api/auth/me', (req, res) => {
   const token = req.cookies?.ns_token;
   if (!token) return res.json({ success: true, data: null });
   try {
-    const user = jwt.verify(token, JWT_SECRET);
+    const user = jwt.verify(token, RUNTIME_JWT_SECRET, { algorithms: ['HS256'] });
     res.json({ success: true, data: user });
   } catch {
     res.json({ success: true, data: null });
@@ -109,33 +126,30 @@ app.get('/api/auth/me', (req, res) => {
 });
 
 app.get('/auth/logout', (req, res) => {
-  res.clearCookie('ns_token');
+  res.clearCookie('ns_token', { path: '/' });
   res.redirect('/admin.html');
 });
 
 // ========== 认证中间件 ==========
-
 function authMiddleware(req, res, next) {
   const token = req.cookies?.ns_token;
   if (!token) return res.status(401).json({ success: false, message: '请先登录' });
   try {
-    req.user = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
-    if (!req.user.id) throw new Error('invalid token');
+    req.user = jwt.verify(token, RUNTIME_JWT_SECRET, { algorithms: ['HS256'] });
+    if (!req.user || !req.user.id) throw new Error('invalid token');
     next();
-  } catch {
-    res.clearCookie('ns_token');
-    res.status(401).json({ success: false, message: '登录已过期，请重新登录' });
+  } catch (e) {
+    res.clearCookie('ns_token', { path: '/' });
+    return res.status(401).json({ success: false, message: '登录已过期，请重新登录' });
   }
 }
 
 // ========== API 路由 ==========
 
-// 后台管理接口（需要登录）
 app.get('/api/notifications', authMiddleware, (req, res) => {
   res.json({ success: true, data: db.getAll(req.user.id) });
 });
 
-// 公共接口（小铃铛用）
 app.get('/api/notifications/active', (req, res) => {
   const userId = req.query.u;
   if (userId) {
@@ -149,27 +163,17 @@ app.get('/api/notifications/emergency', (req, res) => {
   res.json({ success: true, data: db.getEmergencyPublic() });
 });
 
-// SSE 实时推送 - must be before :id route
-const sseClients = new Set();
-
+// SSE (Netlify Functions 不支持持久连接，这里作为 fallback)
 app.get('/api/notifications/stream', (req, res) => {
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
-    'Access-Control-Allow-Origin': '*'
-  });
-  res.write('data: connected\n\n');
-  sseClients.add(res);
-  req.on('close', () => sseClients.delete(res));
+  res.json({ success: true, message: 'SSE 不适用于 Netlify Functions，请使用 Node.js 或 Cloudflare Workers 部署以支持实时推送' });
 });
 
+const sseClients = new Set();
 function notifySSE() {
   sseClients.forEach(client => {
     client.write('event: update\ndata: {}\n\n');
   });
 }
-
 const _create = db.create; const _update = db.update;
 const _delete = db.delete; const _deleteAll = db.deleteAll;
 db.create = (...args) => { const r = _create(...args); notifySSE(); return r; };
@@ -177,7 +181,6 @@ db.update = (...args) => { const r = _update(...args); notifySSE(); return r; };
 db.delete = (...args) => { const r = _delete(...args); notifySSE(); return r; };
 db.deleteAll = (...args) => { const r = _deleteAll(...args); notifySSE(); return r; };
 
-// 管理接口（需要登录）
 app.get('/api/notifications/:id', authMiddleware, (req, res) => {
   const item = db.getById(req.user.id, req.params.id);
   if (!item) return res.status(404).json({ success: false, message: '通知不存在' });
@@ -227,18 +230,14 @@ app.post('/api/notifications/clear-all', authMiddleware, (req, res) => {
   res.json({ success: true, message: '已清空所有通知' });
 });
 
-// 获取嵌入代码（支持用户隔离）
 app.get('/api/widget-code', (req, res) => {
   const host = req.get('host');
-  const protocol = req.protocol;
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol;
   const baseUrl = `${protocol}://${host}`;
   const userId = req.query.u || '';
   const code = `<script src="${baseUrl}/widget.js${userId ? '?u=' + userId : ''}"></script>`;
   res.json({ success: true, data: code });
 });
 
-app.listen(PORT, () => {
-  console.log(`通知系统已启动: http://localhost:${PORT}`);
-  console.log(`后台管理: http://localhost:${PORT}/admin.html`);
-  console.log(`预览页面: http://localhost:${PORT}/preview.html`);
-});
+// 导出 Netlify Function handler
+exports.handler = serverless(app);
