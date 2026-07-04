@@ -1,10 +1,10 @@
-﻿# Notification System
+﻿# 风铃通知 (Zephyr Notification)
 
 在线通知管理系统，支持 GitHub OAuth 登录、悬浮小铃铛组件、实时推送。
 
 ## 项目地址
 
-https://github.com/govmoe/Notification-System
+https://github.com/govmoe/Zephyr-Notification
 
 ## 功能特性
 
@@ -150,4 +150,4 @@ node build-worker.js && npx wrangler deploy
 
 ---
 
-Powered By [002.HK](https://github.com/govmoe/Notification-System)
+Powered By [002.HK](https://github.com/govmoe/Zephyr-Notification)
