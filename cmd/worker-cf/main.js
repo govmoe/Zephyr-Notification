@@ -20,6 +20,8 @@ const ADMIN_HTML = `__ADMIN_HTML__`;
 const ADMIN_CSS = `__ADMIN_CSS__`;
 const ADMIN_JS = `__ADMIN_JS__`;
 const PREVIEW_HTML = `__PREVIEW_HTML__`;
+const ZH_CN = `__ZH_CN__`;
+const EN = `__EN__`;
 
 // ---- 存储实现 ----
 function createKvRepo(kvNamespace) {
@@ -109,13 +111,13 @@ function createProviders(env, baseUrl) {
       const cb = `${baseUrl}/auth/github/callback`;
       const r = await fetch('https://github.com/login/oauth/access_token', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'notice-hub' },
         body: JSON.stringify({ client_id: env.GITHUB_CLIENT_ID, client_secret: env.GITHUB_CLIENT_SECRET, code, redirect_uri: cb })
       });
       return r.json();
     },
     async getUserInfo(token) {
-      const r = await fetch('https://api.github.com/user', { headers: { 'Authorization': `Bearer ${token}` } });
+      const r = await fetch('https://api.github.com/user', { headers: { 'Authorization': `Bearer ${token}`, 'User-Agent': 'notice-hub', 'Accept': 'application/json' } });
       const u = await r.json();
       return { id: String(u.id), login: u.login, name: u.name || u.login, avatar: u.avatar_url, email: u.email || '', provider: 'github' };
     }
@@ -138,28 +140,51 @@ app.use('*', async (c, next) => {
   const p = new URL(c.req.url).pathname;
   if (p === '/admin.html' || p.startsWith('/admin.') || p.startsWith('/api/')) {
     c.res.headers.set('Content-Security-Policy',
-      "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self' data:; connect-src 'self' https:; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'");
+      "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self' data:; connect-src 'self' https:; object-src 'none'; base-uri 'self'");
   }
 });
 app.use('/*', cors());
 app.use('/*', async (c, next) => { c.res.headers.set('Access-Control-Allow-Origin', '*'); return next(); });
 
 // 静态文件
-app.get('/widget.js', c => c.newResponse(WIDGET_JS, 200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-cache' }));
+app.get('/widget.js', c => new Response(WIDGET_JS, { headers: { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-cache' } }));
 app.get('/admin.html', c => c.html(ADMIN_HTML));
-app.get('/admin.css', c => c.newResponse(ADMIN_CSS, 200, { 'Content-Type': 'text/css; charset=utf-8' }));
-app.get('/admin.js', c => c.newResponse(ADMIN_JS, 200, { 'Content-Type': 'application/javascript; charset=utf-8' }));
+app.get('/admin.css', c => new Response(ADMIN_CSS, { headers: { 'Content-Type': 'text/css; charset=utf-8' } }));
+app.get('/admin.js', c => new Response(ADMIN_JS, { headers: { 'Content-Type': 'application/javascript; charset=utf-8' } }));
 app.get('/preview.html', c => c.html(PREVIEW_HTML));
 app.get('/', c => c.redirect('/admin.html'));
+
+// i18n 国际化
+app.get('/api/i18n/zh-CN.json', c => new Response(ZH_CN, { headers: { 'Content-Type': 'application/json; charset=utf-8' } }));
+app.get('/api/i18n/en.json', c => new Response(EN, { headers: { 'Content-Type': 'application/json; charset=utf-8' } }));
+
+// Widget 配置
+app.get('/api/widget-config', async c => {
+  const raw = await c.env.NOTIFICATIONS.get('widget-config', 'json') || {};
+  return c.json({ success: true, data: raw });
+});
+app.put('/api/widget-config', async c => {
+  const body = await c.req.json();
+  await c.env.NOTIFICATIONS.put('widget-config', JSON.stringify(body));
+  return c.json({ success: true, data: body });
+});
+app.post('/api/widget-config/reset', async c => {
+  await c.env.NOTIFICATIONS.delete('widget-config');
+  return c.json({ success: true, message: '已重置' });
+});
+
+// 密码登录 / 注册（Worker 暂不支持，返回 501）
+app.post('/api/auth/login', c => c.json({ success: false, message: 'Worker 暂不支持密码登录，请使用 GitHub OAuth' }, 501));
+app.post('/api/auth/register', c => c.json({ success: false, message: 'Worker 暂不支持注册，请使用 GitHub OAuth' }, 501));
 
 // Providers 列表
 app.get('/api/auth/providers', c => {
   const u = new URL(c.req.url);
   const base = `${u.protocol}//${u.host}`;
   const providers = createProviders(c.env, base);
-  const list = [];
-  for (const [name, p] of providers) if (p.isConfigured()) list.push({ name, displayName: p.displayName, icon: p.icon, authUrl: `${base}/auth/${name}` });
-  return c.json({ success: true, data: list });
+  const oauth = [];
+  for (const [name, p] of providers) if (p.isConfigured()) oauth.push({ name, displayName: p.displayName, icon: p.icon, authUrl: `${base}/auth/${name}` });
+  return c.json({ success: true, data: { oauth, password: true } });
 });
 
 // OAuth2 登录 / 回调

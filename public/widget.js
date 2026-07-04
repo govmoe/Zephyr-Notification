@@ -64,10 +64,10 @@
   var CSS = '' +
     '#ns-widget-root{position:fixed;z-index:2147483647;font-family:Roboto,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;font-size:14px;line-height:1.5;direction:ltr}' +
     '#ns-widget-root *{box-sizing:border-box}' +
-    '.ns-toggle{width:var(--ns-tgl-w);height:var(--ns-tgl-w);border-radius:50%;background:var(--ns-tgl-bg);border:1px solid rgba(0,0,0,.05);box-shadow:0 4px 12px rgba(0,0,0,.1),0 2px 4px rgba(0,0,0,.06);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--ns-tgl-clr);transition:all .25s cubic-bezier(.4,0,.2,1);margin-left:auto;position:relative}' +
+    '.ns-toggle{width:var(--ns-tgl-w, 48px);height:var(--ns-tgl-w, 48px);border-radius:50%;background:var(--ns-tgl-bg, #1976d2);border:1px solid rgba(0,0,0,.05);box-shadow:0 4px 12px rgba(0,0,0,.1),0 2px 4px rgba(0,0,0,.06);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--ns-tgl-clr, #ffffff);transition:all .25s cubic-bezier(.4,0,.2,1);margin-left:auto;position:relative}' +
     '.ns-toggle:hover{box-shadow:0 6px 16px rgba(0,0,0,.15),0 3px 6px rgba(0,0,0,.08);transform:translateY(-2px)}' +
     '.ns-toggle:active{transform:translateY(0) scale(.95);box-shadow:0 2px 8px rgba(0,0,0,.12)}' +
-    '.ns-badge-count{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;border-radius:10px;background:var(--ns-bdg-bg);color:var(--ns-bdg-clr);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 6px;line-height:1;box-shadow:0 2px 6px rgba(0,0,0,.4);pointer-events:none;border:2px solid #fff}' +
+    '.ns-badge-count{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;border-radius:10px;background:var(--ns-bdg-bg, #ff5252);color:var(--ns-bdg-clr, #ffffff);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 6px;line-height:1;box-shadow:0 2px 6px rgba(0,0,0,.4);pointer-events:none;border:2px solid #fff}' +
     '.ns-panel{position:absolute;top:var(--ns-pnl-top);bottom:var(--ns-pnl-bottom);left:var(--ns-pnl-left);right:var(--ns-pnl-right);width:var(--ns-pnl-w);max-height:var(--ns-pnl-mh);overflow-y:auto;overflow-x:hidden;display:none;border-radius:var(--ns-rad)px;background:#fff;box-shadow:0 12px 40px rgba(0,0,0,.12),0 4px 12px rgba(0,0,0,.06);border:1px solid rgba(0,0,0,.05)}' +
     '.ns-panel.ns-open{display:block}' +
     '.ns-panel::-webkit-scrollbar{width:6px}' +
@@ -149,7 +149,7 @@
   }
 
   function applyConfigToRoot() {
-    if (!root) return;
+    if (!root || !cfg || !cfg.position) return;
     var x = cfg.offsetX, y = cfg.offsetY;
     var pos = {};
     if (cfg.position.indexOf('top') === 0) pos.top = y + 'px';
@@ -157,7 +157,10 @@
     if (cfg.position.indexOf('right') > -1) pos.right = x + 'px';
     else pos.left = x + 'px';
 
-    root.style.cssText = Object.keys(pos).map(function(k) { return k + ':' + pos[k]; }).join(';');
+    root.style.setProperty('top', pos.top || 'auto');
+    root.style.setProperty('bottom', pos.bottom || 'auto');
+    root.style.setProperty('right', pos.right || 'auto');
+    root.style.setProperty('left', pos.left || 'auto');
     root.style.setProperty('--ns-tgl-w', cfg.buttonSize + 'px');
     root.style.setProperty('--ns-tgl-clr', cfg.buttonColor);
     root.style.setProperty('--ns-tgl-bg', cfg.buttonBg);
@@ -561,8 +564,12 @@
   }
 
   // ─── Start ──
-  fetchConfig(function(config) {
-    initUI(config);
-  });
+  try {
+    fetchConfig(function(config) {
+      try { initUI(config); } catch (e) { initUI(null); }
+    });
+  } catch (e) {
+    initUI(null);
+  }
 
 })();

@@ -1,6 +1,6 @@
 const API = '/api/notifications';
 const $ = s => document.querySelector(s);
-const $$ = s => document.querySelectorAll(s);
+const $q = s => document.querySelectorAll(s);
 
 // ═══════════════════════════════════
 // i18n 国际化模块
@@ -44,18 +44,18 @@ const i18n = {
   },
 
   applyDOM() {
-    $$('[data-i18n]').forEach(el => {
+    $q('[data-i18n]').forEach(el => {
       const key = el.dataset.i18n;
       if (key) el.innerHTML = this.t(key, el.innerHTML);
     });
-    $$('[data-i18n-placeholder]').forEach(el => {
+    $q('[data-i18n-placeholder]').forEach(el => {
       const key = el.dataset.i18nPlaceholder;
       if (key) el.placeholder = this.t(key, el.placeholder);
     });
   },
 
   updateSwitchers() {
-    $$('.lang-switcher').forEach(sel => {
+    $q('.lang-switcher').forEach(sel => {
       if (!sel) return;
       sel.innerHTML = this.available.map(l =>
         `<option value="${l}"${l === this.locale ? ' selected' : ''}>${this.displayNames[l] || l}</option>`
@@ -125,6 +125,9 @@ document.body.addEventListener('click', e => {
 
   switch (action) {
     // ── 模态弹窗 ──
+    case 'open-preview':
+      window.open('/preview.html', '_blank');
+      break;
     case 'open-modal':
       openModal();
       break;

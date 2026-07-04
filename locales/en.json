@@ -1,7 +1,7 @@
 {
   "app.name": "Zephyr Notification Hub",
   "app.tagline": "Notification Management System",
-  "app.footer": "Powered By 002.HK and EXYON.EE",
+  "app.footer": "Powered By",
 
   "login.title": "Choose a method to sign in",
   "login.loading": "Loading...",

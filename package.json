@@ -10,7 +10,9 @@
     "deploy:worker": "wrangler deploy",
     "build:worker": "node scripts/buildWorker.js",
     "build:edgeone": "node scripts/buildEdgeOne.js",
-    "bump:version": "node scripts/bumpVersion.js"
+    "bump:version": "node scripts/bumpVersion.js",
+    "deploy": "npm run build && wrangler deploy",
+    "preview": "npm run build && wrangler dev"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",
@@ -22,6 +24,6 @@
   },
   "devDependencies": {
     "serverless-http": "^3.2.0",
-    "wrangler": "^4.103.0"
+    "wrangler": "^4.107.0"
   }
 }

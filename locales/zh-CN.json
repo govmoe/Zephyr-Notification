@@ -1,7 +1,7 @@
 {
   "app.name": "风铃通知",
   "app.tagline": "通知管理系统",
-  "app.footer": "Powered By 002.HK and EXYON.EE",
+  "app.footer": "Powered By",
 
   "login.title": "请选择登录方式以访问后台管理",
   "login.loading": "加载中...",
