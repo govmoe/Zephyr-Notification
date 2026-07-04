@@ -1,0 +1,52 @@
+[build]
+  command = "npm run build:netlify"
+  functions = "netlify/functions"
+  publish = "public"
+
+[build.environment]
+  NODE_VERSION = "18"
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/auth/*"
+  to = "/.netlify/functions/api/auth/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/widget.js"
+  to = "/widget.js"
+  status = 200
+
+[[redirects]]
+  from = "/admin.html"
+  to = "/admin.html"
+  status = 200
+
+[[redirects]]
+  from = "/admin.js"
+  to = "/admin.js"
+  status = 200
+
+[[redirects]]
+  from = "/admin.css"
+  to = "/admin.css"
+  status = 200
+
+[[redirects]]
+  from = "/preview.html"
+  to = "/preview.html"
+  status = 200
+
+[[redirects]]
+  from = "/"
+  to = "/admin.html"
+  status = 302
+
+[dev]
+  command = "node cmd/serverApp/main.js"
+  publish = "public"
+  targetPort = 3456

@@ -1,101 +1,280 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-locale="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>风铃通知 - 后台</title>
+  <title data-i18n="app.name">notice-hub · 后台</title>
   <link rel="stylesheet" href="admin.css">
 </head>
 <body>
+
+  <!-- ═══ 主体内容（登录后显示）═══ -->
   <div class="container" id="mainContainer" style="display:none">
     <header>
-      <h1>风铃通知</h1>
+      <h1 data-i18n="app.name">notice-hub</h1>
       <div class="header-actions">
-        <button class="btn btn-outline" onclick="window.open('/preview.html')">预览通知</button>
-        <button class="btn btn-outline" id="btnGetCode">获取嵌入代码</button>
-        <div id="userInfo" class="user-info">
-          <a href="/auth/github" class="btn btn-outline">GitHub 登录</a>
-        </div>
+        <button class="btn btn-outline" data-action="open-preview" onclick="window.open('/preview.html')" data-i18n="nav.preview">预览通知</button>
+        <button class="btn btn-outline" id="btnGetCode" data-i18n="nav.embedCode">获取嵌入代码</button>
+        <select class="lang-switcher" data-action="switch-lang"></select>
+        <div id="userInfo" class="user-info"></div>
       </div>
     </header>
 
+    <!-- 添加通知 -->
     <section class="panel add-panel">
-      <h2>添加新通知</h2>
+      <h2 data-i18n="notify.addTitle">添加新通知</h2>
       <form id="formAdd">
         <div class="form-row">
           <div class="form-group flex-1">
-            <label for="title">标题 *</label>
-            <input type="text" id="title" placeholder="通知标题" required>
+            <label for="title" data-i18n="notify.title">标题 *</label>
+            <input type="text" id="title" data-i18n-placeholder="notify.titlePlaceholder" placeholder="通知标题" required>
           </div>
           <div class="form-group">
-            <label for="type">类型</label>
+            <label for="type" data-i18n="notify.type">类型</label>
             <select id="type">
-              <option value="info">信息 (info)</option>
-              <option value="success">成功 (success)</option>
-              <option value="warning">警告 (warning)</option>
-              <option value="error">错误 (error)</option>
+              <option value="info" data-i18n="notify.typeInfo">信息</option>
+              <option value="success" data-i18n="notify.typeSuccess">成功</option>
+              <option value="warning" data-i18n="notify.typeWarning">警告</option>
+              <option value="error" data-i18n="notify.typeError">错误</option>
             </select>
           </div>
         </div>
         <div class="form-group">
-          <label for="content">内容 <span style="font-weight:400;color:#999;font-size:12px">（支持 HTML 和 Markdown 语法）</span></label>
-          <textarea id="content" rows="3" placeholder="通知详细内容（支持 HTML 语法）"></textarea>
+          <label for="content">
+            <span data-i18n="notify.content">内容</span>
+            <span class="hint" data-i18n="notify.contentHint">（支持 HTML 和 Markdown）</span>
+          </label>
+          <textarea id="content" rows="3" data-i18n-placeholder="notify.contentPlaceholder" placeholder="通知详细内容"></textarea>
         </div>
         <div class="form-row">
           <label class="checkbox-label">
             <input type="checkbox" id="is_emergency">
-            <span>紧急通知 (红色突出显示)</span>
+            <span data-i18n="notify.emergency">紧急通知（红色突出显示）</span>
           </label>
-          <button type="submit" class="btn btn-primary">添加通知</button>
+          <button type="submit" class="btn btn-primary" data-i18n="notify.add">添加通知</button>
         </div>
       </form>
     </section>
 
+    <!-- 紧急通知 -->
     <section class="panel emergency-panel" id="emergencyPanel" style="display:none">
-      <h2 class="emergency-title">紧急通知</h2>
+      <h2 class="emergency-title" data-i18n="notify.emergencyTitle">紧急通知</h2>
       <div id="emergencyList"></div>
     </section>
 
+    <!-- 通知列表 -->
     <section class="panel list-panel">
       <div class="list-header">
-        <h2>所有通知</h2>
+        <h2 data-i18n="notify.allTitle">所有通知</h2>
         <div class="list-actions">
-          <input type="text" id="searchInput" placeholder="搜索通知..." class="search-input">
-          <button class="btn btn-sm" id="btnRefresh">刷新</button>
-          <button class="btn btn-sm btn-danger" id="btnClearAll">清空全部</button>
+          <input type="text" id="searchInput" data-i18n-placeholder="notify.searchPlaceholder" placeholder="搜索通知..." class="search-input">
+          <button class="btn btn-sm" id="btnRefresh" data-i18n="notify.refresh">刷新</button>
+          <button class="btn btn-sm btn-danger" id="btnClearAll" data-i18n="notify.clearAll">清空全部</button>
         </div>
       </div>
-      <div id="notificationList">
-        <div class="empty">暂无通知</div>
-      </div>
+      <div id="notificationList"><div class="empty" data-i18n="notify.empty">暂无通知</div></div>
     </section>
 
+    <!-- 小铃铛设置 -->
+    <section class="panel widget-settings-panel" id="widgetSettingsPanel">
+      <h2><span data-i18n="widget.settingsTitle">小铃铛设置</span> <span class="hint" data-i18n="widget.settingsHint">配置将在保存后对所有已打开的页面生效</span></h2>
+      <form id="widgetConfigForm" class="widget-config-form">
+
+        <div class="settings-group">
+          <h3 data-i18n="widget.position">位置</h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label data-i18n="widget.positionLabel">屏幕位置</label>
+              <select id="widgetPosition">
+                <option value="top-right" data-i18n="widget.posTopRight">右上角</option>
+                <option value="top-left" data-i18n="widget.posTopLeft">左上角</option>
+                <option value="bottom-right" data-i18n="widget.posBottomRight">右下角</option>
+                <option value="bottom-left" data-i18n="widget.posBottomLeft">左下角</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label data-i18n="widget.offsetX">水平偏移 (px)</label>
+              <input type="number" id="widgetOffsetX" min="0" max="200">
+            </div>
+            <div class="form-group">
+              <label data-i18n="widget.offsetY">垂直偏移 (px)</label>
+              <input type="number" id="widgetOffsetY" min="0" max="200">
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <h3 data-i18n="widget.buttonStyle">按钮样式</h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label data-i18n="widget.buttonSize">按钮大小 (px)</label>
+              <input type="number" id="widgetButtonSize" min="32" max="72">
+            </div>
+            <div class="form-group">
+              <label data-i18n="widget.buttonColor">图标颜色</label>
+              <input type="color" id="widgetButtonColor">
+            </div>
+            <div class="form-group">
+              <label data-i18n="widget.buttonBg">按钮背景</label>
+              <input type="color" id="widgetButtonBg">
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <h3 data-i18n="widget.badgeStyle">角标样式</h3>
+          <div class="form-row">
+            <div class="form-group checkbox-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="widgetShowBadge">
+                <span data-i18n="widget.showBadge">显示未读数角标</span>
+              </label>
+            </div>
+            <div class="form-group">
+              <label data-i18n="widget.badgeBg">角标背景</label>
+              <input type="color" id="widgetBadgeBg">
+            </div>
+            <div class="form-group">
+              <label data-i18n="widget.badgeColor">角标文字色</label>
+              <input type="color" id="widgetBadgeColor">
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <h3 data-i18n="widget.panelStyle">面板样式</h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label data-i18n="widget.panelWidth">面板宽度 (px)</label>
+              <input type="number" id="widgetPanelWidth" min="280" max="600">
+            </div>
+            <div class="form-group">
+              <label data-i18n="widget.borderRadius">圆角 (px)</label>
+              <input type="number" id="widgetBorderRadius" min="0" max="24">
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <h3 data-i18n="widget.themeColors">主题色</h3>
+          <div class="form-row">
+            <div class="form-group">
+              <label data-i18n="notify.typeInfo">信息</label>
+              <input type="color" id="widgetPrimaryColor">
+            </div>
+            <div class="form-group">
+              <label data-i18n="notify.typeSuccess">成功</label>
+              <input type="color" id="widgetSuccessColor">
+            </div>
+            <div class="form-group">
+              <label data-i18n="notify.typeWarning">警告</label>
+              <input type="color" id="widgetWarningColor">
+            </div>
+            <div class="form-group">
+              <label data-i18n="notify.typeError">错误</label>
+              <input type="color" id="widgetErrorColor">
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <h3 data-i18n="widget.behavior">行为</h3>
+          <div class="form-row">
+            <div class="form-group checkbox-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="widgetAnimationEnabled">
+                <span data-i18n="widget.animationEnabled">开启动画效果</span>
+              </label>
+            </div>
+            <div class="form-group checkbox-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="widgetSoundEnabled">
+                <span data-i18n="widget.soundEnabled">开启通知声音</span>
+              </label>
+            </div>
+            <div class="form-group">
+              <label data-i18n="widget.languageLabel">小铃铛语言</label>
+              <select id="widgetLanguage">
+                <option value="auto" data-i18n="widget.langAuto">跟随浏览器</option>
+                <option value="zh-CN" data-i18n="lang.zh-CN">简体中文</option>
+                <option value="en" data-i18n="lang.en">English</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-actions">
+          <button type="submit" class="btn btn-primary" data-i18n="widget.save">保存设置</button>
+          <button type="button" class="btn btn-outline" data-action="reset-widget-config" data-i18n="widget.reset">恢复默认</button>
+        </div>
+        <div class="settings-status" id="widgetConfigStatus"></div>
+      </form>
+    </section>
+
+    <!-- 嵌入代码弹窗 -->
     <div class="modal" id="modalCode">
       <div class="modal-content">
         <div class="modal-header">
-          <h3>嵌入代码</h3>
-          <button class="modal-close" onclick="closeModal()">&times;</button>
+          <h3 data-i18n="embed.title">嵌入代码</h3>
+          <button class="modal-close" data-action="close-modal" title="关闭">&times;</button>
         </div>
-        <p class="modal-hint">将以下代码复制到你网站的 &lt;body&gt; 标签内即可显示通知：</p>
+        <p class="modal-hint" data-i18n="embed.hint">将以下代码复制到网站 &lt;body&gt; 内：</p>
         <textarea id="embedCode" readonly rows="5"></textarea>
-        <button class="btn btn-primary" id="btnCopy">复制代码</button>
+        <button class="btn btn-primary" data-action="copy-code" data-i18n="embed.copy">复制代码</button>
       </div>
     </div>
-    <div class="modal-overlay" id="modalOverlay" onclick="closeModal()"></div>
+    <div class="modal-overlay" id="modalOverlay" data-action="close-modal"></div>
   </div>
 
+  <!-- ═══ 登录页 ═══ -->
   <div class="login-page" id="loginPage">
     <div class="login-box">
-      <h1>风铃通知</h1>
-      <p>通过 GitHub 登录以访问后台管理</p>
-      <a href="/auth/github" class="btn-github">
-        <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-        GitHub 登录
-      </a>
+      <h1 data-i18n="app.name">notice-hub</h1>
+      <p data-i18n="login.title">请选择登录方式</p>
+
+      <div id="providerList" class="provider-list"></div>
+
+      <div class="login-divider"><span data-i18n="login.passwordLogin">密码登录</span></div>
+
+      <form id="passwordLoginForm" class="password-login-form" autocomplete="off">
+        <div class="form-group">
+          <label for="loginUsername" data-i18n="login.username">用户名</label>
+          <input type="text" id="loginUsername" data-i18n-placeholder="login.usernamePlaceholder" placeholder="输入用户名" required autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label for="loginPassword" data-i18n="login.password">密码</label>
+          <input type="password" id="loginPassword" data-i18n-placeholder="login.passwordPlaceholder" placeholder="输入密码" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn btn-primary btn-full" data-i18n="login.login">登录</button>
+        <button type="button" class="btn-link" id="showRegisterBtn" data-action="show-register" data-i18n="login.register">注册账号</button>
+      </form>
+
+      <form id="registerForm" class="password-login-form" style="display:none" autocomplete="off">
+        <div class="form-group">
+          <label for="regUsername" data-i18n="login.username">用户名</label>
+          <input type="text" id="regUsername" data-i18n-placeholder="login.usernamePlaceholder" placeholder="输入用户名" required autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label for="regPassword" data-i18n="login.password">密码</label>
+          <input type="password" id="regPassword" data-i18n-placeholder="login.passwordPlaceholder" placeholder="输入密码" required autocomplete="new-password">
+        </div>
+        <button type="submit" class="btn btn-primary btn-full" data-i18n="login.register">注册</button>
+        <button type="button" class="btn-link" id="showLoginBtn" data-action="show-login" data-i18n="login.login">返回登录</button>
+      </form>
+
+      <div class="login-error" id="loginError"></div>
+
+      <div class="login-lang-switcher">
+        <select class="lang-switcher" data-action="switch-lang"></select>
+      </div>
     </div>
   </div>
 
-  <footer style="text-align:center;padding:20px 0 10px;color:#999;font-size:12px;">Powered By <a href="https://github.com/govmoe/Zephyr-Notification" style="color:#999;">002.HK</a> v1.3</footer>
+  <footer class="app-footer">
+    <span data-i18n="app.footer">Powered By</span>
+    <a href="https://github.com/govmoe/Zephyr-Notification">002.HK</a>
+    <span id="footerVersion">v1.5</span>
+  </footer>
 
   <script src="admin.js"></script>
 </body>

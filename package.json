@@ -1,13 +1,16 @@
 {
-  "name": "notification-system",
-  "version": "1.0.0",
-  "description": "信息通知系统 - 支持嵌入前端、后台管理、API接口",
-  "main": "server.js",
+  "name": "notice-hub",
+  "version": "2.0.0",
+  "description": "风铃通知 - 分层式通知管理系统（Express/Cloudflare/EdgeOne/Netlify）",
+  "main": "cmd/serverApp/main.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js",
+    "start": "node cmd/serverApp/main.js",
+    "dev": "node cmd/serverApp/main.js",
     "dev:worker": "wrangler dev",
-    "deploy:worker": "wrangler deploy"
+    "deploy:worker": "wrangler deploy",
+    "build:worker": "node scripts/buildWorker.js",
+    "build:edgeone": "node scripts/buildEdgeOne.js",
+    "bump:version": "node scripts/bumpVersion.js"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",
@@ -18,6 +21,7 @@
     "jsonwebtoken": "^9.0.3"
   },
   "devDependencies": {
+    "serverless-http": "^3.2.0",
     "wrangler": "^4.103.0"
   }
 }
