@@ -10,22 +10,37 @@ const db = require('./database');
 const app = express();
 const PORT = process.env.PORT || 3456;
 
-// Windows 本地开发环境 SSL 修复
-if (process.env.NODE_ENV !== 'production') {
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-}
-
 // ========== GitHub OAuth 配置 ==========
 // 在 https://github.com/settings/developers 创建 OAuth App 并填入
 const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID || '';
 const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET || '';
-const JWT_SECRET = process.env.JWT_SECRET || 'notification-system-secret-change-me';
+const crypto = require('crypto');
+
+const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
+if (!process.env.JWT_SECRET) {
+  console.warn('[安全警告] 未设置 JWT_SECRET 环境变量，已使用随机密钥。重启后所有会话将失效。');
+  console.warn('[安全警告] 请在 .env 中设置 JWT_SECRET=你的密钥');
+}
 const GITHUB_CALLBACK_URL = process.env.GITHUB_CALLBACK_URL || `http://localhost:${PORT}/auth/github/callback`;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10kb' }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
+app.disable('x-powered-by');
+
+// 简易限流
+const rateLimit = new Map();
+app.use((req, res, next) => {
+  const ip = req.ip;
+  const now = Date.now();
+  if (!rateLimit.has(ip)) rateLimit.set(ip, []);
+  const requests = rateLimit.get(ip).filter(t => now - t < 60000);
+  if (requests.length > 60) return res.status(429).json({ success: false, message: '请求过于频繁' });
+  requests.push(now);
+  rateLimit.set(ip, requests);
+  next();
+});
 
 // ========== GitHub OAuth 路由 ==========
 
@@ -71,7 +86,13 @@ app.get('/auth/github/callback', async (req, res) => {
     });
     console.log('User info:', user);
     const token = jwt.sign({ id: user.id, login: user.login, name: user.name, avatar: user.avatar_url }, JWT_SECRET, { expiresIn: '7d' });
-    res.cookie('ns_token', token, { httpOnly: true, maxAge: 7 * 24 * 3600 * 1000, sameSite: 'lax' });
+    res.cookie('ns_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 3600 * 1000,
+      path: '/'
+    });
     res.redirect('/admin.html');
   } catch (e) {
     console.error('Auth error:', e);
@@ -101,10 +122,12 @@ function authMiddleware(req, res, next) {
   const token = req.cookies?.ns_token;
   if (!token) return res.status(401).json({ success: false, message: '请先登录' });
   try {
-    req.user = jwt.verify(token, JWT_SECRET);
+    req.user = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (!req.user.id) throw new Error('invalid token');
     next();
   } catch {
-    res.status(401).json({ success: false, message: '登录已过期' });
+    res.clearCookie('ns_token');
+    res.status(401).json({ success: false, message: '登录已过期，请重新登录' });
   }
 }
 
@@ -166,8 +189,12 @@ app.get('/api/notifications/:id', authMiddleware, (req, res) => {
 
 app.post('/api/notifications', authMiddleware, (req, res) => {
   const { title, content, type, is_emergency } = req.body;
-  if (!title) return res.status(400).json({ success: false, message: '标题不能为空' });
-  const item = db.create(req.user.id, { title, content, type, is_emergency });
+  if (!title || typeof title !== 'string') return res.status(400).json({ success: false, message: '标题不能为空' });
+  if (title.length > 200) return res.status(400).json({ success: false, message: '标题过长' });
+  if (content && typeof content !== 'string') return res.status(400).json({ success: false, message: '内容格式错误' });
+  if (content && content.length > 10000) return res.status(400).json({ success: false, message: '内容过长' });
+  if (type && !['info', 'success', 'warning', 'error'].includes(type)) return res.status(400).json({ success: false, message: '无效的通知类型' });
+  const item = db.create(req.user.id, { title, content, type, is_emergency: !!is_emergency });
   res.status(201).json({ success: true, data: item });
 });
 
