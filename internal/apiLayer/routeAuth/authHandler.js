@@ -11,7 +11,7 @@ function createAuthRouter(authService) {
   const router = Router();
 
   // ── 获取可用登录方式 ──
-  router.get('/api/auth/providers', (req, res) => {
+  router.get('/auth/providers', (req, res) => {
     const protocol = req.headers['x-forwarded-proto'] || req.protocol;
     const host = req.get('host');
     const baseUrl = `${protocol}://${host}`;
@@ -19,38 +19,8 @@ function createAuthRouter(authService) {
     res.json({ success: true, data: providers });
   });
 
-  // ── OAuth2 登录跳转 ──
-  router.get('/auth/:provider', (req, res) => {
-    const { provider } = req.params;
-    try {
-      const authUrl = authService.getAuthUrl(provider);
-      res.redirect(authUrl);
-    } catch (e) {
-      if (e.message.includes('not configured')) {
-        return res.status(500).json({ error: `${provider} OAuth 未配置` });
-      }
-      res.status(400).json({ error: `未知的 OAuth provider: ${provider}` });
-    }
-  });
-
-  // ── OAuth2 回调 ──
-  router.get('/auth/:provider/callback', async (req, res) => {
-    const { provider } = req.params;
-    const { code } = req.query;
-    if (!code) return res.redirect('/admin.html?error=no_code');
-
-    try {
-      const { token, cookie } = await authService.handleCallback(provider, code);
-      res.cookie('ns_token', token, cookie);
-      res.redirect('/admin.html');
-    } catch (e) {
-      console.error(`[${provider}] Auth error:`, e.message);
-      res.redirect(`/admin.html?error=auth_failed&provider=${provider}`);
-    }
-  });
-
   // ── 密码注册 ──
-  router.post('/api/auth/register', (req, res) => {
+  router.post('/auth/register', (req, res) => {
     const { username, password } = req.body || {};
     const result = authService.register(username, password);
     if (!result.success) {
@@ -60,7 +30,7 @@ function createAuthRouter(authService) {
   });
 
   // ── 密码登录 ──
-  router.post('/api/auth/login', (req, res) => {
+  router.post('/auth/login', (req, res) => {
     const { username, password } = req.body || {};
     const result = authService.login(username, password);
     if (!result.success) {
@@ -71,7 +41,7 @@ function createAuthRouter(authService) {
   });
 
   // ── 获取当前用户信息 ──
-  router.get('/api/auth/me', (req, res) => {
+  router.get('/auth/me', (req, res) => {
     const token = req.cookies?.ns_token;
     if (!token) return res.json({ success: true, data: null });
 
@@ -80,14 +50,8 @@ function createAuthRouter(authService) {
     res.json({ success: true, data: user });
   });
 
-  // ── 登出 ──
-  router.get('/auth/logout', (req, res) => {
-    res.clearCookie('ns_token', { path: '/' });
-    res.redirect('/admin.html');
-  });
-
   // ── i18n 语言文件 ──
-  router.get('/api/i18n/:locale.json', (req, res) => {
+  router.get('/i18n/:locale.json', (req, res) => {
     const { locale } = req.params;
     const localesDir = path.join(__dirname, '..', '..', '..', 'locales');
     const filePath = path.join(localesDir, `${locale}.json`);

@@ -83,10 +83,31 @@ app.use(rateLimit);
 
 app.locals.sseClients = sseClients;
 
-// 路由
-app.use('/', createAuthRouter(authService));
-app.use('/', createNotifyRouter(notifyService, JWT_SECRET));
-app.use('/', createWidgetRouter(widgetRepo, JWT_SECRET));
+// OAuth 重定向路由（不走 /api）
+app.get('/auth/logout', (req, res) => {
+  res.clearCookie('ns_token');
+  res.redirect('/admin.html');
+});
+
+app.get('/auth/:provider', (req, res) => {
+  try {
+    const authUrl = authService.getAuthUrl(req.params.provider);
+    res.redirect(authUrl);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/auth/:provider/callback', async (req, res) => {
+  try {
+    const result = await authService.handleCallback(req.params.provider, req.query.code);
+    res.cookie('ns_token', result.token, result.cookie || { httpOnly: true, maxAge: 7 * 24 * 3600 * 1000, sameSite: 'lax', path: '/' });
+    res.redirect('/admin.html');
+  } catch (e) { res.redirect('/admin.html?error=auth_failed'); }
+});
+
+// API 路由
+app.use('/api', createAuthRouter(authService));
+app.use('/api', createNotifyRouter(notifyService, JWT_SECRET));
+app.use('/api', createWidgetRouter(widgetRepo, JWT_SECRET));
 
 // 静态文件
 app.use(express.static(path.join(__dirname, '..', '..', 'public')));
