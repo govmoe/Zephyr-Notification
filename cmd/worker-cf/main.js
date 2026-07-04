@@ -188,6 +188,8 @@ app.get('/api/auth/providers', c => {
 });
 
 // OAuth2 登录 / 回调
+app.get('/auth/logout', c => new Response(null, { status: 302, headers: { 'Location': '/admin.html', 'Set-Cookie': 'ns_token=; Path=/; Max-Age=0' } }));
+
 app.get('/auth/:provider', c => {
   const u = new URL(c.req.url);
   const providers = createProviders(c.env, `${u.protocol}//${u.host}`);
@@ -224,8 +226,6 @@ app.get('/api/auth/me', async c => {
   const user = await verifyJWT(m[1], jwtSecret);
   return c.json({ success: true, data: user });
 });
-
-app.get('/auth/logout', c => new Response(null, { status: 302, headers: { 'Location': '/admin.html', 'Set-Cookie': 'ns_token=; Path=/; Max-Age=0' } }));
 
 // 通知 API
 const now = () => { const d = new Date(); d.setHours(d.getHours() + 8); return d.toISOString().replace('T', ' ').slice(0, 19); };
