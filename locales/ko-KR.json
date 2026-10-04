@@ -48,6 +48,7 @@
   "login.registerFailed": "가입에 실패했습니다",
   "login.usernameExists": "이미 존재하는 사용자 이름입니다",
   "login.invalidCredentials": "사용자 이름 또는 비밀번호가 올바르지 않습니다",
+  "api.kvNotBound": "저장소가 바인딩되지 않았습니다. Cloudflare에서 Worker에 KV 네임스페이스(NOTIFICATIONS)를 바인딩한 후 다시 배포하세요",
 
   "nav.preview": "알림 미리보기",
   "nav.embedCode": "삽입 코드 가져오기",

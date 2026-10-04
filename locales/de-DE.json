@@ -48,6 +48,7 @@
   "login.registerFailed": "Registrierung fehlgeschlagen",
   "login.usernameExists": "Benutzername bereits vergeben",
   "login.invalidCredentials": "Benutzername oder Passwort falsch",
+  "api.kvNotBound": "Speicher nicht gebunden: Binden Sie im Cloudflare-Dashboard einen KV-Namespace (NOTIFICATIONS) an den Worker und stellen Sie ihn erneut bereit",
 
   "nav.preview": "Benachrichtigungen vorschauen",
   "nav.embedCode": "Einbettungscode abrufen",

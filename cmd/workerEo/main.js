@@ -61,6 +61,65 @@ function createStore(env) {
   };
 }
 
+// ---- 密码凭证（PBKDF2-HMAC-SHA256，310000 次迭代，与 CF/Node 端一致）----
+const PBKDF2_ITERATIONS = 310000;
+const USERS_KEY = 'auth:users';
+
+const bytesToHex = bytes => [...new Uint8Array(bytes)].map(b => b.toString(16).padStart(2, '0')).join('');
+const hexToBytes = hex => Uint8Array.from(hex.match(/.{1,2}/g) || [], h => parseInt(h, 16));
+
+function timingSafeEqual(a, b) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  return diff === 0;
+}
+
+async function hashPassword(password) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const baseKey = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), { name: 'PBKDF2' }, false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' }, baseKey, 256);
+  return { hash: bytesToHex(bits), salt: bytesToHex(salt) };
+}
+
+async function verifyPassword(password, saltHex, storedHash) {
+  try {
+    if (!password || !saltHex || !storedHash) return false;
+    const baseKey = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), { name: 'PBKDF2' }, false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: hexToBytes(saltHex), iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' }, baseKey, 256);
+    return timingSafeEqual(new Uint8Array(bits), hexToBytes(storedHash));
+  } catch { return false; }
+}
+
+function validateUsername(username) {
+  if (!username || typeof username !== 'string') return 'Username is required';
+  if (username.length < 2) return 'Username must be at least 2 characters';
+  if (username.length > 32) return 'Username must be at most 32 characters';
+  if (!/^[a-zA-Z0-9_一-龥]+$/.test(username)) return 'Username may only contain letters, numbers, underscores and Chinese characters';
+  return null;
+}
+
+function validatePassword(password) {
+  if (!password || typeof password !== 'string') return 'Password is required';
+  if (password.length < 6) return 'Password must be at least 6 characters';
+  if (password.length > 128) return 'Password must be at most 128 characters';
+  return null;
+}
+
+// 用户凭证持久化：优先外部存储 API，无配置时使用实例内存（边缘实例内存不共享，配置 STORAGE_API_URL 可跨实例持久化）
+async function readUsers(store) {
+  const raw = await store.getAll(USERS_KEY);
+  return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+}
+
+function sessionCookie(token) {
+  return `ns_token=${token}; Path=/; Max-Age=604800; HttpOnly; SameSite=Lax; Secure`;
+}
+
+function jsonError(sh, status, code, message, extraHeaders) {
+  return new Response(JSON.stringify({ success: false, code, message }), { status, headers: { ...sh, ...(extraHeaders || {}), 'Content-Type': 'application/json; charset=utf-8' } });
+}
+
 function now() { return new Date().toISOString().replace('T', ' ').slice(0, 19); }
 
 // ---- OAuth2 Providers ----
@@ -131,7 +190,55 @@ async function handleRequest(request, env) {
   if (path === '/api/auth/providers') {
     const list = [];
     for (const [n, p] of providers) if (p.isConfigured()) list.push({ name: n, displayName: p.displayName, icon: p.icon, authUrl: `${baseUrl}/auth/${n}` });
-    return new Response(JSON.stringify({ success: true, data: list }), { headers: { ...sh, 'Content-Type': 'application/json' } });
+    // 契约与 Express/CF 端一致：{ oauth: [...], password: boolean }
+    return new Response(JSON.stringify({ success: true, data: { oauth: list, password: true } }), { headers: { ...sh, 'Content-Type': 'application/json' } });
+  }
+
+  // 密码注册：校验 → 查重 → PBKDF2 哈希 → 持久化（STORAGE_API_URL 或实例内存）
+  if (path === '/api/auth/register' && request.method === 'POST') {
+    try {
+      const body = await request.json().catch(() => ({})) || {};
+      const username = typeof body.username === 'string' ? body.username.trim() : '';
+      const password = body.password;
+      const nameErr = validateUsername(username);
+      if (nameErr) return jsonError(sh, 400, 'api.badRequest', nameErr);
+      const pwdErr = validatePassword(password);
+      if (pwdErr) return jsonError(sh, 400, 'api.badRequest', pwdErr);
+      const store = createStore(env);
+      const users = await readUsers(store);
+      if (users[username]) return jsonError(sh, 400, 'login.usernameExists', 'Username already exists');
+      const { hash, salt } = await hashPassword(password);
+      users[username] = { username, hash, salt, createdAt: new Date().toISOString() };
+      await store.saveAll(USERS_KEY, users);
+      return new Response(JSON.stringify({ success: true, code: 'login.registerSuccess', message: 'Registration successful' }), { headers: { ...sh, 'Content-Type': 'application/json; charset=utf-8' } });
+    } catch (e) {
+      console.error('[auth:register]', e && e.stack ? e.stack : e);
+      return jsonError(sh, 500, 'api.serverError', `Internal error (register): ${e?.name || 'Error'}: ${e?.message || e}`);
+    }
+  }
+
+  // 密码登录：读取凭证 → 校验密码 → 签发 JWT 并写入 ns_token Cookie
+  if (path === '/api/auth/login' && request.method === 'POST') {
+    try {
+      const body = await request.json().catch(() => ({})) || {};
+      const username = typeof body.username === 'string' ? body.username.trim() : '';
+      const password = body.password;
+      if (!username || !password) return jsonError(sh, 401, 'login.invalidCredentials', 'Invalid username or password');
+      const store = createStore(env);
+      const stored = (await readUsers(store))[username];
+      if (!stored || !(await verifyPassword(password, stored.salt, stored.hash))) {
+        return jsonError(sh, 401, 'login.invalidCredentials', 'Invalid username or password');
+      }
+      const user = { id: `local:${username}`, login: username, name: username, avatar: '', provider: 'password' };
+      const token = await signJWT(user, JWT_SECRET, 604800);
+      return new Response(JSON.stringify({ success: true, code: 'login.loginSuccess', message: 'Login successful', data: user }), {
+        status: 200,
+        headers: { ...sh, 'Content-Type': 'application/json; charset=utf-8', 'Set-Cookie': sessionCookie(token) }
+      });
+    } catch (e) {
+      console.error('[auth:login]', e && e.stack ? e.stack : e);
+      return jsonError(sh, 500, 'api.serverError', `Internal error (login): ${e?.name || 'Error'}: ${e?.message || e}`);
+    }
   }
 
   const authM = path.match(/^\/auth\/(\w+)$/);
@@ -253,7 +360,8 @@ async function handleRequest(request, env) {
 
     return new Response('Not Found', { status: 404, headers: sh });
   } catch (e) {
-    return new Response(JSON.stringify({ success: false, code: 'api.serverError', message: 'Internal server error' }), { status: 500, headers: { ...sh, 'Content-Type': 'application/json' } });
+    console.error('[worker]', e && e.stack ? e.stack : e);
+    return new Response(JSON.stringify({ success: false, code: 'api.serverError', message: `Internal error: ${e?.name || 'Error'}: ${e?.message || e}` }), { status: 500, headers: { ...sh, 'Content-Type': 'application/json' } });
   }
 }
 

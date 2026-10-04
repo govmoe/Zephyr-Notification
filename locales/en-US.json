@@ -48,6 +48,7 @@
   "login.registerFailed": "Registration failed",
   "login.usernameExists": "Username already exists",
   "login.invalidCredentials": "Invalid username or password",
+  "api.kvNotBound": "Storage not bound: bind a KV namespace (NOTIFICATIONS) to the Worker in Cloudflare and redeploy",
 
   "nav.preview": "Preview Notifications",
   "nav.embedCode": "Get Embed Code",

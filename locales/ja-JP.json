@@ -48,6 +48,7 @@
   "login.registerFailed": "登録に失敗しました",
   "login.usernameExists": "ユーザー名は既に存在します",
   "login.invalidCredentials": "ユーザー名またはパスワードが正しくありません",
+  "api.kvNotBound": "ストレージが未バインドです。Cloudflare で Worker に KV 名前空間（NOTIFICATIONS）をバインドして再デプロイしてください",
 
   "nav.preview": "通知をプレビュー",
   "nav.embedCode": "埋め込みコードを取得",

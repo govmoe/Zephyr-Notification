@@ -48,6 +48,7 @@
   "login.registerFailed": "Échec de l'inscription",
   "login.usernameExists": "Ce nom d'utilisateur existe déjà",
   "login.invalidCredentials": "Nom d'utilisateur ou mot de passe incorrect",
+  "api.kvNotBound": "Stockage non lié : liez un espace de noms KV (NOTIFICATIONS) au Worker dans Cloudflare puis redéployez",
 
   "nav.preview": "Aperçu des notifications",
   "nav.embedCode": "Obtenir le code d'intégration",

@@ -48,6 +48,7 @@
   "login.registerFailed": "注册失败",
   "login.usernameExists": "用户名已存在",
   "login.invalidCredentials": "用户名或密码错误",
+  "api.kvNotBound": "数据存储未绑定：请在 Cloudflare 中为 Worker 绑定 KV 命名空间（NOTIFICATIONS）后重新部署",
 
   "nav.preview": "预览通知",
   "nav.embedCode": "获取嵌入代码",

@@ -99,6 +99,70 @@ async function verifyJWT(token, secret) {
   } catch { return null; }
 }
 
+// ---- 密码凭证（与 Node 端 UserEntity 保持一致：PBKDF2-HMAC-SHA256，310000 次迭代）----
+const PBKDF2_ITERATIONS = 310000;
+const USERS_KEY = 'auth:users'; // KV 键：{ username: { username, hash, salt, createdAt } }
+
+const bytesToHex = bytes => [...new Uint8Array(bytes)].map(b => b.toString(16).padStart(2, '0')).join('');
+const hexToBytes = hex => Uint8Array.from(hex.match(/.{1,2}/g) || [], h => parseInt(h, 16));
+
+// 恒定时间比较，防止时序攻击
+function timingSafeEqual(a, b) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  return diff === 0;
+}
+
+async function hashPassword(password) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const baseKey = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), { name: 'PBKDF2' }, false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' }, baseKey, 256);
+  return { hash: bytesToHex(bits), salt: bytesToHex(salt) };
+}
+
+async function verifyPassword(password, saltHex, storedHash) {
+  try {
+    if (!password || !saltHex || !storedHash) return false;
+    const baseKey = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), { name: 'PBKDF2' }, false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: hexToBytes(saltHex), iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' }, baseKey, 256);
+    return timingSafeEqual(new Uint8Array(bits), hexToBytes(storedHash));
+  } catch { return false; }
+}
+
+// 校验规则与 internal/domainCond/userAuth/userEntity.js 保持一致
+function validateUsername(username) {
+  if (!username || typeof username !== 'string') return 'Username is required';
+  if (username.length < 2) return 'Username must be at least 2 characters';
+  if (username.length > 32) return 'Username must be at most 32 characters';
+  if (!/^[a-zA-Z0-9_一-龥]+$/.test(username)) return 'Username may only contain letters, numbers, underscores and Chinese characters';
+  return null;
+}
+
+function validatePassword(password) {
+  if (!password || typeof password !== 'string') return 'Password is required';
+  if (password.length < 6) return 'Password must be at least 6 characters';
+  if (password.length > 128) return 'Password must be at most 128 characters';
+  return null;
+}
+
+// 读取全部用户；KV 无此键时返回空对象，读取异常直接抛出（禁止用空数据回写覆盖）
+async function readUsers(kv) {
+  const raw = await kv.get(USERS_KEY, 'json');
+  return raw && typeof raw === 'object' ? raw : {};
+}
+
+function sessionCookie(token, reqUrl) {
+  return `ns_token=${token}; Path=/; Max-Age=604800; HttpOnly; SameSite=Lax${reqUrl.startsWith('https') ? '; Secure' : ''}`;
+}
+
+// 500 时把真实错误名/消息带回客户端（自部署工具，便于定位绑定/配额问题），完整堆栈进 tail 日志
+function serverError(c, stage, e) {
+  console.error(`[auth:${stage}]`, e && e.stack ? e.stack : e);
+  const detail = e && (e.message || String(e)) ? `${e.name || 'Error'}: ${e.message || e}` : 'Unknown error';
+  return c.json({ success: false, code: 'api.serverError', message: `Internal error (${stage}): ${detail}` }, 500);
+}
+
 // ---- OAuth2 Providers ----
 function createProviders(env, baseUrl) {
   const github = {
@@ -184,9 +248,59 @@ app.post('/api/widget-config/reset', async c => {
 // 版本信息（APP_VERSION 由构建脚本读取 VERSION 文件注入）
 app.get('/api/version', c => c.json({ success: true, data: { version: APP_VERSION } }));
 
-// 密码登录 / 注册（Worker 暂不支持，返回 501）
-app.post('/api/auth/login', c => c.json({ success: false, code: 'api.serverError', message: 'Password login is not supported on this runtime, please use OAuth' }, 501));
-app.post('/api/auth/register', c => c.json({ success: false, code: 'api.serverError', message: 'Registration is not supported on this runtime, please use OAuth' }, 501));
+// 密码注册：校验 → 查重 → PBKDF2 哈希 → 写入 KV（auth:users）
+app.post('/api/auth/register', async c => {
+  try {
+    const body = await c.req.json().catch(() => ({})) || {};
+    const username = typeof body.username === 'string' ? body.username.trim() : '';
+    const password = body.password;
+    const nameErr = validateUsername(username);
+    if (nameErr) return c.json({ success: false, message: nameErr }, 400);
+    const pwdErr = validatePassword(password);
+    if (pwdErr) return c.json({ success: false, message: pwdErr }, 400);
+    const kv = c.env.NOTIFICATIONS;
+    if (!kv || typeof kv.put !== 'function') {
+      return c.json({ success: false, code: 'api.kvNotBound', message: 'KV namespace "NOTIFICATIONS" is not bound. Add the binding in wrangler.toml / dashboard and redeploy.' }, 503);
+    }
+    const users = await readUsers(kv); // 读-改-写；读取失败会抛出，不会覆盖已有数据
+    if (users[username]) return c.json({ success: false, code: 'login.usernameExists', message: 'Username already exists' }, 400);
+    const { hash, salt } = await hashPassword(password);
+    users[username] = { username, hash, salt, createdAt: new Date().toISOString() };
+    await kv.put(USERS_KEY, JSON.stringify(users));
+    return c.json({ success: true, code: 'login.registerSuccess', message: 'Registration successful' });
+  } catch (e) {
+    return serverError(c, 'register', e);
+  }
+});
+
+// 密码登录：读取 KV 凭证 → 校验密码 → 签发 JWT 并写入 ns_token Cookie
+app.post('/api/auth/login', async c => {
+  try {
+    const body = await c.req.json().catch(() => ({})) || {};
+    const username = typeof body.username === 'string' ? body.username.trim() : '';
+    const password = body.password;
+    if (!username || !password) {
+      return c.json({ success: false, code: 'login.invalidCredentials', message: 'Invalid username or password' }, 401);
+    }
+    const kv = c.env.NOTIFICATIONS;
+    if (!kv || typeof kv.get !== 'function') {
+      return c.json({ success: false, code: 'api.kvNotBound', message: 'KV namespace "NOTIFICATIONS" is not bound. Add the binding in wrangler.toml / dashboard and redeploy.' }, 503);
+    }
+    const stored = (await readUsers(kv))[username];
+    if (!stored || !(await verifyPassword(password, stored.salt, stored.hash))) {
+      return c.json({ success: false, code: 'login.invalidCredentials', message: 'Invalid username or password' }, 401);
+    }
+    const user = { id: `local:${username}`, login: username, name: username, avatar: '', provider: 'password' };
+    const jwtSecret = c.env.JWT_SECRET || (c.env.JWT_SECRET_DEFAULT || 'cf-worker-secret');
+    const token = await signJWT(user, jwtSecret, 604800);
+    return new Response(JSON.stringify({ success: true, code: 'login.loginSuccess', message: 'Login successful', data: user }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json; charset=utf-8', 'Set-Cookie': sessionCookie(token, c.req.url) }
+    });
+  } catch (e) {
+    return serverError(c, 'login', e);
+  }
+});
 
 // Providers 列表
 app.get('/api/auth/providers', c => {

@@ -582,6 +582,8 @@ function __(key, params) { return i18n.t(key, params); }
 // 后端错误码本地化：优先 api.xxx 稳定码，其次回退键，最后原始 message
 function apiText(res, fallbackKey) {
   if (res && res.code && i18n.strings[res.code]) return __(res.code);
+  // 服务端内部错误直接展示后端给出的具体原因（如 KV 未绑定/配额异常），便于自助排查
+  if (res && res.code === 'api.serverError' && res.message) return res.message;
   if (fallbackKey) return __(fallbackKey);
   return (res && res.message) || '';
 }
